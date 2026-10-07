@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bóveda Neural · Escape Room de IA</title>
+  <meta name="description" content="Escape room educativo sobre Big Data, Machine Learning y Prompt Engineering para 5.º año, Ciclo Orientado en Economía." />
+  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <!-- ===== HUD ===== -->
+  <header id="hud" class="hud hidden">
+    <div class="hud-left">
+      <img src="assets/img/logo.svg" alt="" class="hud-logo" />
+      <div>
+        <div class="hud-label">Agente</div>
+        <div id="hud-name" class="hud-name">—</div>
+      </div>
+    </div>
+    <div class="hud-keys" id="hud-keys" aria-label="Palabras clave obtenidas"></div>
+    <div class="hud-right">
+      <div class="hud-timer" id="hud-timer" title="Tiempo restante">60:00</div>
+      <button class="icon-btn" id="btn-sound" title="Sonido" aria-label="Activar o desactivar sonido">🔊</button>
+      <button class="icon-btn" id="btn-menu" title="Opciones" aria-label="Opciones">⚙️</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- ===== BIENVENIDA ===== -->
+    <section id="screen-welcome" class="screen active">
+      <div class="welcome">
+        <img src="assets/img/logo.svg" alt="Logo Bóveda Neural" class="welcome-logo" />
+        <h1 class="title">BÓVEDA <span>NEURAL</span></h1>
+        <p class="subtitle">Escape del Banco Austral de Datos</p>
+
+        <div class="story card">
+          <img src="assets/img/aria.svg" alt="ARIA, la IA del banco" class="aria-big" />
+          <div>
+            <p><strong>Ushuaia, 2031.</strong> Sos pasante en el <em>Banco Austral de Datos</em>. Una falla hizo que <strong>ARIA</strong>, la inteligencia artificial que controla el edificio, cerrara todas las puertas.</p>
+            <p>Para salir tenés que atravesar <strong>6 salas</strong> en <strong>60 minutos</strong>. Cada sala te entrega una <strong>palabra clave</strong>. Con las 6, abrís la bóveda final.</p>
+            <p class="warn">⚠️ Si te equivocás, ARIA <strong>reinicia la sala</strong> y empezás esa sección de nuevo.</p>
+          </div>
+        </div>
+
+        <form id="form-name" class="card name-card" autocomplete="off">
+          <label for="input-name">Ingresá tu nombre y apellido para registrarte como agente</label>
+          <div class="name-row">
+            <input id="input-name" type="text" maxlength="40" placeholder="Ej.: Lucía Fernández" required />
+            <button type="submit" class="btn btn-primary">Ingresar al banco ▶</button>
+          </div>
+          <small>Tu nombre aparecerá durante todo el juego y en tu certificado. No se puede cambiar después.</small>
+        </form>
+
+        <div id="resume-box" class="card resume hidden">
+          <p>Hay una partida guardada de <strong id="resume-name"></strong>.</p>
+          <div class="row">
+            <button class="btn btn-primary" id="btn-resume">Continuar partida</button>
+            <button class="btn btn-ghost" id="btn-new">Nuevo jugador</button>
+          </div>
+        </div>
+
+        <ul class="rules">
+          <li>🧩 6 salas · 6 palabras clave</li>
+          <li>⏱️ 60 minutos</li>
+          <li>💡 Pistas: +2 min cada una</li>
+          <li>📷 Una sala usa la cámara</li>
+          <li>🤖 Una sala usa una IA real</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===== MAPA ===== -->
+    <section id="screen-map" class="screen">
+      <div class="map-head">
+        <img src="assets/img/aria.svg" alt="" class="aria-small" />
+        <div class="speech" id="map-speech"></div>
+      </div>
+      <div class="map-grid" id="map-grid"></div>
+      <div class="vault-tile" id="vault-tile">
+        <img src="assets/img/boveda.svg" alt="Bóveda final" />
+        <div>
+          <h3>Bóveda final</h3>
+          <p id="vault-status">Necesitás las 6 palabras clave.</p>
+        </div>
+        <button class="btn btn-gold" id="btn-vault" disabled>Abrir bóveda</button>
+      </div>
+    </section>
+
+    <!-- ===== SALA ===== -->
+    <section id="screen-room" class="screen">
+      <div class="room-head">
+        <img id="room-icon" src="" alt="" />
+        <div>
+          <div class="room-kicker" id="room-kicker"></div>
+          <h2 id="room-title"></h2>
+        </div>
+        <div class="room-actions">
+          <button class="btn btn-ghost small" id="btn-hint">💡 Pista (+2 min)</button>
+          <button class="btn btn-ghost small" id="btn-back-map">🗺️ Mapa</button>
+        </div>
+      </div>
+      <div class="progress"><div class="progress-bar" id="room-progress"></div></div>
+      <div id="room-body" class="room-body"></div>
+    </section>
+
+    <!-- ===== BÓVEDA FINAL ===== -->
+    <section id="screen-final" class="screen">
+      <div class="final card">
+        <img src="assets/img/boveda.svg" alt="" class="final-img" id="final-img" />
+        <h2>La bóveda final</h2>
+        <p>Escribí las 6 palabras clave <strong>en el orden de las salas</strong>. ARIA revisará el código completo.</p>
+        <form id="form-final" class="final-inputs" autocomplete="off"></form>
+        <div class="row center">
+          <button class="btn btn-ghost" id="btn-final-back">🗺️ Volver al mapa</button>
+          <button class="btn btn-gold" id="btn-final-open">🔓 Abrir</button>
+        </div>
+        <p class="feedback" id="final-feedback"></p>
+      </div>
+    </section>
+
+    <!-- ===== CERTIFICADO ===== -->
+    <section id="screen-cert" class="screen">
+      <div class="cert-wrap">
+        <h2 class="center">🎉 ¡Escapaste de la Bóveda Neural!</h2>
+        <p class="center" id="cert-summary"></p>
+        <canvas id="cert-canvas" width="1600" height="1130" aria-label="Certificado"></canvas>
+        <div class="row center">
+          <button class="btn btn-gold" id="btn-cert-download">⬇️ Descargar certificado (PNG)</button>
+          <button class="btn btn-primary" id="btn-cert-print">🖨️ Imprimir / Guardar PDF</button>
+          <button class="btn btn-ghost" id="btn-cert-new">Nuevo jugador</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== MODAL ===== -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box" id="modal-box">
+      <div id="modal-content"></div>
+      <div class="row center" id="modal-actions"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <footer class="foot">Contenidos: Programa EsencIA · Unidades 2 y 3 · Juego educativo para <span id="foot-course"></span></footer>
+
+  <script src="js/data.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/vision.js"></script>
+  <script src="js/certificate.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

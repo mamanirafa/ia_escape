@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d3a7a"/><stop offset="1" stop-color="#0b1a3d"/></linearGradient></defs><rect x="4" y="4" width="112" height="112" rx="26" fill="url(#bg)" stroke="#19d3c5" stroke-width="4"/>
+<g fill="none" stroke="#19d3c5" stroke-width="5">
+<ellipse cx="52" cy="32" rx="26" ry="9" fill="#0b1a3d"/>
+<path d="M26 32v48c0 5 12 9 26 9s26-4 26-9V32"/>
+<path d="M26 48c0 5 12 9 26 9s26-4 26-9M26 64c0 5 12 9 26 9s26-4 26-9"/>
+</g>
+<g fill="#f5b942"><circle cx="90" cy="40" r="5"/><circle cx="98" cy="60" r="5"/><circle cx="90" cy="80" r="5"/></g>
+<g stroke="#f5b942" stroke-width="3" stroke-dasharray="3 4"><line x1="78" y1="40" x2="86" y2="40"/><line x1="78" y1="60" x2="94" y2="60"/><line x1="78" y1="80" x2="86" y2="80"/></g>
+<text x="52" y="106" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="12" fill="#f5b942">3V</text>
+</svg>
