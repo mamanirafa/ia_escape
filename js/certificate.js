@@ -96,14 +96,17 @@ const Certificate = (() => {
 
     // palabras clave
     const kws = data.keywords;
-    ctx.font = "700 22px Orbitron, sans-serif";
-    const pad = 22, gap = 16;
-    const widths = kws.map(k => ctx.measureText(k).width + pad * 2);
-    const total = widths.reduce((a, b) => a + b, 0) + gap * (kws.length - 1);
+    let fs = 22, pad = 22, gap = 16, widths, total;
+    do {
+      ctx.font = `700 ${fs}px Orbitron, sans-serif`;
+      widths = kws.map(k => ctx.measureText(k).width + pad * 2);
+      total = widths.reduce((a, b) => a + b, 0) + gap * (kws.length - 1);
+      if (total > W - 220) { fs -= 1; pad = Math.max(12, pad - 1); gap = Math.max(8, gap - 1); }
+    } while (total > W - 220 && fs > 12);
     let x = W / 2 - total / 2;
     kws.forEach((k, i) => {
       ctx.fillStyle = "#0b1a3d"; roundRect(ctx, x, 640, widths[i], 50, 25); ctx.fill();
-      ctx.fillStyle = "#f5b942"; ctx.textAlign = "center"; ctx.fillText(k, x + widths[i] / 2, 674);
+      ctx.fillStyle = "#f5b942"; ctx.textAlign = "center"; ctx.fillText(k, x + widths[i] / 2, 665 + fs * 0.4);
       x += widths[i] + gap;
     });
 

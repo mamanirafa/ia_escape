@@ -5,6 +5,9 @@
    Para adaptar el juego, editá SOLO este archivo:
    - CONFIG: datos del docente, curso y tiempo.
    - ROOMS: salas, desafíos y palabras clave.
+   Cada sala tiene 8 palabras posibles: a cada jugador le tocan
+   palabras distintas y un orden distinto en la bóveda final,
+   así no sirve copiar el código del compañero.
    ========================================================= */
 
 const CONFIG = {
@@ -38,7 +41,7 @@ const ROOMS = [
     nombre: "Centro de Datos",
     tema: "Big Data · Las 3 V",
     icono: "assets/img/sala1.svg",
-    palabra: "DATOS",
+    palabras: ["DATOS", "VOLUMEN", "VELOCIDAD", "VARIEDAD", "SENSOR", "REGISTRO", "NUBE", "SERVIDOR"], // a cada jugador le toca una al azar
     minutosSugeridos: 8,
     intro: "Bienvenido/a al Centro de Datos. Cada segundo entran millones de registros: pagos, búsquedas, fotos, sensores… Para abrir la primera puerta, demostrá que sabés reconocer qué hace “grande” al Big Data.",
     pista: "Volumen = CUÁNTO se guarda (enorme cantidad). Velocidad = QUÉ TAN RÁPIDO se generan los datos. Variedad = DE CUÁNTOS TIPOS son (texto, audio, imagen, video).",
@@ -78,7 +81,7 @@ const ROOMS = [
     nombre: "Oficina de Cumplimiento",
     tema: "Ética en el manejo de datos",
     icono: "assets/img/sala2.svg",
-    palabra: "CONFIANZA",
+    palabras: ["CONFIANZA", "PRIVACIDAD", "PERMISO", "RESPETO", "ESCUDO", "CANDADO", "DERECHOS", "CUIDADO"], // a cada jugador le toca una al azar
     minutosSugeridos: 8,
     intro: "Llegaste a Cumplimiento: acá se decide qué empresas pueden usar datos de clientes. Hay casos sospechosos sobre el escritorio. Identificá qué principio ético está en juego en cada uno.",
     pista: "Transparencia = explicar QUÉ datos se usan y PARA QUÉ. Consentimiento = pedir PERMISO antes de usarlos. Privacidad = PROTEGER los datos y no compartirlos con terceros.",
@@ -118,7 +121,7 @@ const ROOMS = [
     nombre: "Laboratorio de Algoritmos",
     tema: "Pensamiento computacional",
     icono: "assets/img/sala3.svg",
-    palabra: "ALGORITMO",
+    palabras: ["ALGORITMO", "PATRÓN", "SECUENCIA", "ABSTRACCIÓN", "LÓGICA", "BUCLE", "DIAGRAMA", "PASOS"], // a cada jugador le toca una al azar
     minutosSugeridos: 10,
     intro: "Este laboratorio es el cerebro del banco. ARIA desordenó los procesos. Primero uní cada habilidad del pensamiento computacional con su ejemplo; después reconstruí el algoritmo que aprueba microcréditos.",
     pista: "Descomponer = dividir en partes. Patrones = algo que se repite. Secuenciación = pasos en orden. Abstracción = quedarse con lo importante. En el algoritmo, pensá: primero los datos y el permiso, al final la decisión.",
@@ -156,7 +159,7 @@ const ROOMS = [
     nombre: "Fábrica de Modelos",
     tema: "Machine Learning y Deep Learning",
     icono: "assets/img/sala4.svg",
-    palabra: "MODELO",
+    palabras: ["MODELO", "NEURONA", "ETIQUETA", "PÍXEL", "VISIÓN", "PREDICCIÓN", "CÁMARA", "CAPAS"], // a cada jugador le toca una al azar
     minutosSugeridos: 10,
     intro: "En la Fábrica de Modelos las máquinas aprenden de los datos. Primero clasificá cómo aprende cada sistema. Después vas a entrenar tu ojo con una IA de visión real: ¡prepará la cámara!",
     pista: "Supervisado = aprende con ejemplos ETIQUETADOS (ya sabemos la respuesta). No supervisado = busca GRUPOS solo, sin etiquetas. Profundo = usa REDES NEURONALES para imágenes, voz o video.",
@@ -212,7 +215,7 @@ const ROOMS = [
     nombre: "Estudio de Prompts",
     tema: "Prompt Engineering",
     icono: "assets/img/sala5.svg",
-    palabra: "PROMPT",
+    palabras: ["PROMPT", "ROL", "CONTEXTO", "FORMATO", "EJEMPLO", "CLARIDAD", "ITERAR", "TAREA"], // a cada jugador le toca una al azar
     minutosSugeridos: 12,
     intro: "ARIA solo obedece instrucciones claras. En el Estudio de Prompts vas a reconocer técnicas, armar el prompt perfecto y probarlo con una IA real. La calidad de la respuesta depende de tu instrucción.",
     pista: "Role prompting = “Sos un…”. Zero shot = sin ejemplos. Few shot = con ejemplos. Cadena de pensamiento = “Paso 1… Paso 2…”. Un buen prompt es claro, específico, con contexto y SIN datos personales.",
@@ -297,7 +300,7 @@ const ROOMS = [
     nombre: "Sala de Verificación",
     tema: "Alucinaciones y sesgo algorítmico",
     icono: "assets/img/sala6.svg",
-    palabra: "VERDAD",
+    palabras: ["VERDAD", "SESGO", "FUENTE", "EVIDENCIA", "REVISIÓN", "CHEQUEO", "CRITERIO", "HECHO"], // a cada jugador le toca una al azar
     minutosSugeridos: 8,
     intro: "Última sala antes de la bóveda. ARIA está fallando: mezcla datos reales con datos inventados. Detectá sus alucinaciones y resolvé un caso de sesgo. Si te equivocás… vuelta a empezar.",
     pista: "Una alucinación es una respuesta inventada que suena segura. Desconfiá de fechas imposibles u obras que no existen. Si dudás, verificá en una fuente confiable.",

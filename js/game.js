@@ -15,10 +15,26 @@
 
   /* ---------- estado ---------- */
   const TOTAL_MS = CONFIG.minutos * 60000;
-  const fresh = () => ({ name: "", startedAt: 0, penaltyMs: 0, unlocked: 0, keywords: [], resets: 0, hints: 0, hintRooms: [], finishedAt: 0, promptText: "", sound: true });
+  const fresh = () => ({ name: "", startedAt: 0, penaltyMs: 0, unlocked: 0, keywords: [], resets: 0, hints: 0, hintRooms: [], finishedAt: 0, promptText: "", sound: true, words: [], order: [] });
   let S = fresh();
   let room = null, roomIdx = -1, stageIdx = -1;
   let timerId = null;
+
+  /* Palabras clave y orden únicos por jugador (anti-copia) */
+  function rnd(n) {
+    try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; } catch (e) { return Math.floor(Math.random() * n); }
+  }
+  function assignWords() {
+    if (!Array.isArray(S.words) || S.words.length !== ROOMS.length) {
+      S.words = ROOMS.map((r, i) => S.keywords[i] || r.palabras[rnd(r.palabras.length)]);
+    }
+    if (!Array.isArray(S.order) || S.order.length !== ROOMS.length) {
+      const o = ROOMS.map((r, i) => i);
+      for (let i = o.length - 1; i > 0; i--) { const j = rnd(i + 1); [o[i], o[j]] = [o[j], o[i]]; }
+      if (o.every((v, i) => v === i)) o.reverse();
+      S.order = o;
+    }
+  }
 
   function save() { try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(S)); } catch (e) {} }
   function load() { try { const r = localStorage.getItem(CONFIG.storageKey); return r ? Object.assign(fresh(), JSON.parse(r)) : null; } catch (e) { return null; } }
@@ -93,13 +109,14 @@
       e.preventDefault();
       const raw = $("#input-name").value.replace(/\s+/g, " ").trim();
       if (raw.length < 3 || !/\p{L}{2,}/u.test(raw)) { toast("Escribí tu nombre y apellido (mínimo 3 letras)."); $("#input-name").focus(); return; }
-      S = fresh(); S.name = titleCase(raw); S.startedAt = Date.now(); save();
+      S = fresh(); S.name = titleCase(raw); S.startedAt = Date.now(); assignWords(); save();
       SFX.click();
       beginGame(true);
     });
   }
 
   async function beginGame(first = false) {
+    assignWords(); save();
     renderHUD(); startTimer();
     if (S.finishedAt) { showCertificate(); return; }
     renderMap(); show("screen-map");
@@ -107,7 +124,7 @@
       await modal({
         html: `<img src="assets/img/aria.svg" alt=""><h3>Hola, ${esc(S.name)}</h3>
                <p>Soy <b>ARIA</b>, la IA del banco. Tuve un error y cerré todo. 😬</p>
-               <p class="explain">• Resolvé las salas en orden.<br>• Cada sala te da una <b>palabra clave</b>: anotala.<br>• Un error = la sala se reinicia.<br>• Las pistas suman 2 minutos.<br>• Tenés 60 minutos. ¡El reloj ya corre!</p>`,
+               <p class="explain">• Resolvé las salas en orden.<br>• Cada sala te da una <b>palabra clave</b>: anotala.<br>• Tus palabras son <b>únicas</b>: las del compañero no te sirven. 😉<br>• Un error = la sala se reinicia.<br>• Las pistas suman 2 minutos.<br>• Tenés 60 minutos. ¡El reloj ya corre!</p>`,
         buttons: [{ label: "¡Vamos! ▶", cls: "btn-primary" }]
       });
     }
@@ -121,7 +138,7 @@
     "Mitad del camino. En la <b>Fábrica de Modelos</b> vas a usar la cámara con una IA de visión real.",
     "¡Excelente! En el <b>Estudio de Prompts</b> vas a darle instrucciones a una IA de verdad.",
     "Última sala: la <b>Sala de Verificación</b>. No confíes en todo lo que dice una IA… ni siquiera en mí.",
-    "¡Tenés las 6 palabras! Andá a la <b>bóveda final</b> y escribilas en orden."
+    "¡Tenés las 6 palabras! Andá a la <b>bóveda final</b>: te voy a pedir tus palabras en un orden especial."
   ];
   function renderMap() {
     $("#map-speech").innerHTML = `<b>ARIA:</b> ${MAP_LINES[Math.min(S.unlocked, 6)]}`;
@@ -149,7 +166,7 @@
     });
     const all = S.keywords.filter(Boolean).length === ROOMS.length;
     $("#btn-vault").disabled = !all;
-    $("#vault-status").textContent = all ? "¡Lista para abrir! Escribí las 6 palabras en orden." : `Palabras obtenidas: ${S.keywords.filter(Boolean).length} de ${ROOMS.length}.`;
+    $("#vault-status").textContent = all ? "¡Lista para abrir! Tené a mano tus 6 palabras." : `Palabras obtenidas: ${S.keywords.filter(Boolean).length} de ${ROOMS.length}.`;
   }
 
   /* ---------- salas ---------- */
@@ -211,7 +228,7 @@
 
   async function completeRoom() {
     Vision.stopCamera();
-    S.keywords[roomIdx] = room.palabra;
+    S.keywords[roomIdx] = S.words[roomIdx];
     S.unlocked = Math.max(S.unlocked, roomIdx + 1);
     save(); renderHUD();
     SFX.key();
@@ -220,8 +237,8 @@
       <div class="card reveal">
         <img src="assets/img/llave.svg" alt="">
         <p class="stage-sub" style="margin:10px 0 0">¡Sala superada, ${esc(S.name.split(" ")[0])}! Tu palabra clave ${roomIdx + 1} es:</p>
-        <div class="keyword">${esc(room.palabra)}</div>
-        <p class="stage-sub">Anotala: la vas a necesitar en la bóveda final.</p>
+        <div class="keyword">${esc(S.words[roomIdx])}</div>
+        <p class="stage-sub">Anotala: la vas a necesitar en la bóveda final.<br><small>ARIA sortea las palabras para cada agente: la de tu compañero probablemente sea otra.</small></p>
         <button class="btn btn-primary" id="btn-room-done">Volver al mapa ▶</button>
       </div>`;
     $("#btn-room-done").onclick = () => { SFX.click(); leaveRoom(); };
@@ -488,18 +505,17 @@
 
   /* ---------- bóveda final ---------- */
   function renderFinal() {
-    $("#form-final").innerHTML = ROOMS.map((r, i) => `<div><label for="fk${i}">${i + 1}. ${esc(r.nombre)}</label><input type="text" id="fk${i}" maxlength="14"></div>`).join("");
+    $("#form-final").innerHTML = S.order.map((ri, k) => `<div><label for="fk${k}">${k + 1}.º → palabra de la Sala ${ri + 1} (${esc(ROOMS[ri].nombre)})</label><input type="text" id="fk${k}" maxlength="16"></div>`).join("");
     $("#final-feedback").textContent = ""; $("#final-feedback").className = "feedback";
     show("screen-final");
     setTimeout(() => $("#fk0")?.focus(), 300);
   }
   async function tryOpenVault() {
-    const vals = ROOMS.map((r, i) => norm($("#fk" + i).value));
-    const ok = vals.every((v, i) => v === norm(ROOMS[i].palabra));
+    const ok = S.order.every((ri, k) => norm($("#fk" + k).value) === norm(S.words[ri]));
     const fb = $("#final-feedback");
     if (!ok) {
       SFX.error(); const card = $(".final"); card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake");
-      fb.className = "feedback bad"; fb.textContent = "❌ Código incorrecto. Revisá la ortografía y el ORDEN de las salas.";
+      fb.className = "feedback bad"; fb.textContent = "❌ Código incorrecto. Revisá que sean TUS palabras y el orden que pide ARIA.";
       return;
     }
     fb.className = "feedback good"; fb.textContent = "✅ ¡Código aceptado! Abriendo la bóveda…";
@@ -517,7 +533,7 @@
     const date = d.toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric" });
     const time = (t <= TOTAL_MS ? fmt(t) : fmt(t) + " (con tiempo extra)") + " min";
     $("#cert-summary").textContent = `${S.name}: tiempo ${time} · reinicios ${S.resets} · pistas ${S.hints}`;
-    const data = { name: S.name, date, time, resets: S.resets, hints: S.hints, keywords: ROOMS.map(r => r.palabra), docente: CONFIG.docente, curso: CONFIG.curso, institucion: CONFIG.institucion };
+    const data = { name: S.name, date, time, resets: S.resets, hints: S.hints, keywords: S.words, docente: CONFIG.docente, curso: CONFIG.curso, institucion: CONFIG.institucion };
     await Certificate.draw($("#cert-canvas"), data);
   }
 

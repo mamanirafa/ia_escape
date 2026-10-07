@@ -13,18 +13,19 @@ Juego educativo tipo **sala de escape** para jugar en línea, pensado para estud
 
 | # | Sala | Contenido | Desafíos | Palabra clave |
 |---|------|-----------|----------|---------------|
-| 1 | Centro de Datos | Big Data · 3 V | Clasificar 5 casos + pregunta Big Data/IA | `DATOS` |
-| 2 | Oficina de Cumplimiento | Ética de datos | Transparencia / Consentimiento / Privacidad | `CONFIANZA` |
-| 3 | Laboratorio de Algoritmos | Pensamiento computacional | Unir habilidades + ordenar un algoritmo | `ALGORITMO` |
-| 4 | Fábrica de Modelos | ML y DL | Tipos de aprendizaje + **cámara con IA de visión** | `MODELO` |
-| 5 | Estudio de Prompts | Prompt Engineering | Técnicas + armar prompt + **probarlo en una IA real** | `PROMPT` |
-| 6 | Sala de Verificación | Alucinaciones y sesgo | ¿Real o alucinación? + caso de sesgo | `VERDAD` |
+| 1 | Centro de Datos | Big Data · 3 V | Clasificar 5 casos + pregunta Big Data/IA | sorteada |
+| 2 | Oficina de Cumplimiento | Ética de datos | Transparencia / Consentimiento / Privacidad | sorteada |
+| 3 | Laboratorio de Algoritmos | Pensamiento computacional | Unir habilidades + ordenar un algoritmo | sorteada |
+| 4 | Fábrica de Modelos | ML y DL | Tipos de aprendizaje + **cámara con IA de visión** | sorteada |
+| 5 | Estudio de Prompts | Prompt Engineering | Técnicas + armar prompt + **probarlo en una IA real** | sorteada |
+| 6 | Sala de Verificación | Alucinaciones y sesgo | ¿Real o alucinación? + caso de sesgo | sorteada |
 
 **Reglas**
 
 - El jugador escribe su **nombre** al inicio; se muestra en todo momento y queda en el **certificado final**.
 - **Un error reinicia la sala** (las preguntas se mezclan de nuevo).
 - Las **pistas** cuestan +2 minutos.
+- **Anti-copia:** cada jugador recibe palabras clave sorteadas (8 posibles por sala) y un orden propio para la bóveda final.
 - Al terminar se genera un **certificado** descargable en PNG o imprimible en PDF, con nombre, tiempo, reinicios, pistas y código de verificación.
 - El progreso se guarda en el navegador: si se recarga la página, se vuelve al mapa con las palabras obtenidas.
 
