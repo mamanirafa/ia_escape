@@ -2,7 +2,10 @@
    BÓVEDA NEURAL · Escape Room de IA
    Contenidos del juego (Unidades 2 y 3 · Programa EsencIA)
    ---------------------------------------------------------
-   Para adaptar el juego, editá SOLO este archivo:
+   Contenidos en ESPAÑOL (idioma por defecto).
+   Las versiones en francés e inglés están en data.fr.js y data.en.js
+   y deben mantener la MISMA estructura y el mismo orden.
+   Para adaptar el juego, editá este archivo:
    - CONFIG: datos del docente, curso y tiempo.
    - ROOMS: salas, desafíos y palabras clave.
    Cada sala tiene 8 palabras posibles: a cada jugador le tocan
@@ -15,6 +18,8 @@ const CONFIG = {
   subtitulo: "Escape del Banco Austral de Datos",
   docente: "Prof. Rafael Mamani",
   curso: "5.º año · Ciclo Orientado en Economía",
+  // Traducción del curso para el certificado en otros idiomas
+  cursoI18n: { fr: "5e année · Cycle orienté Économie", en: "Year 5 · Economics Track" },
   institucion: "", // ej.: "Colegio Integral de Educación Ushuaia"
   minutos: 60,
   penalidadPistaMin: 2, // minutos que suma cada pista
@@ -34,7 +39,7 @@ const CONFIG = {
    vision    → mostrar objetos a la cámara (IA de visión MobileNet)
    Cualquier error reinicia la sala completa. */
 
-const ROOMS = [
+const ROOMS_ES = [
   /* ---------------- SALA 1 · BIG DATA ---------------- */
   {
     id: 1,
@@ -337,7 +342,7 @@ const ROOMS = [
 ];
 
 /* Mensajes de ARIA cuando la sala se reinicia */
-const ALERTAS = [
+const ALERTAS_ES = [
   "¡ALERTA! Respuesta incorrecta detectada. Reiniciando la sala…",
   "Error en el sistema. Los datos se mezclaron otra vez.",
   "ARIA bloqueó la puerta. Volvé a intentarlo desde el principio de la sala.",

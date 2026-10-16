@@ -59,10 +59,27 @@ const Vision = (() => {
     "lab coat": "guardapolvo", "jersey": "remera", "sweatshirt": "buzo", "wig": "peluca", "mask": "máscara", "hand-held computer": "dispositivo de mano",
     "ipod": "reproductor", "analog clock": "reloj", "wall clock": "reloj de pared", "digital clock": "reloj digital", "tennis ball": "pelota de tenis", "paper towel": "rollo de papel", "toilet tissue": "papel higiénico", "web site": "sitio web", "calculator": "calculadora", "pencil box": "cartuchera", "carton": "caja", "plastic bag": "bolsa", "t-shirt": "remera", "cardigan": "saquito", "spotlight": "foco", "lampshade": "lámpara", "table lamp": "lámpara", "desk": "escritorio", "chair": "silla", "folding chair": "silla", "window shade": "persiana", "street sign": "cartel", "banana": "banana", "orange": "naranja", "granny smith": "manzana", "loupe": "lupa", "rubber eraser": "goma de borrar", "space bar": "teclado", "typewriter keyboard": "teclado"
   };
-  function translate(className) {
+  /* Français */
+  const FR = {
+    "cellular telephone": "téléphone portable", "water bottle": "bouteille d’eau", "coffee mug": "tasse", "cup": "tasse/verre",
+    "computer keyboard": "clavier", "mouse": "souris", "backpack": "sac à dos", "wallet": "portefeuille", "purse": "porte-monnaie",
+    "ballpoint": "stylo", "fountain pen": "stylo-plume", "pencil": "crayon", "sunglasses": "lunettes de soleil", "sunglass": "lunettes",
+    "pop bottle": "bouteille", "notebook": "ordinateur portable", "laptop": "ordinateur portable", "monitor": "écran", "screen": "écran",
+    "desktop computer": "ordinateur", "television": "télévision", "remote control": "télécommande", "book jacket": "livre",
+    "envelope": "enveloppe", "binder": "classeur", "pill bottle": "flacon", "beer glass": "verre", "water jug": "bidon",
+    "lab coat": "blouse", "jersey": "t-shirt", "sweatshirt": "sweat", "wig": "perruque", "mask": "masque", "hand-held computer": "appareil portable",
+    "ipod": "lecteur", "analog clock": "horloge", "wall clock": "horloge murale", "digital clock": "réveil numérique", "tennis ball": "balle de tennis",
+    "paper towel": "essuie-tout", "toilet tissue": "papier toilette", "web site": "site web", "calculator": "calculatrice", "pencil box": "trousse",
+    "carton": "carton", "plastic bag": "sac plastique", "t-shirt": "t-shirt", "cardigan": "gilet", "spotlight": "projecteur", "lampshade": "lampe",
+    "table lamp": "lampe", "desk": "bureau", "chair": "chaise", "folding chair": "chaise", "window shade": "store", "street sign": "panneau",
+    "banana": "banane", "orange": "orange", "granny smith": "pomme", "loupe": "loupe", "rubber eraser": "gomme", "space bar": "clavier", "typewriter keyboard": "clavier"
+  };
+  function translate(className, lang = "es") {
     const first = className.split(",")[0].trim().toLowerCase();
-    if (ES[first]) return ES[first];
-    for (const k in ES) if (first.includes(k)) return ES[k];
+    if (lang === "en") return first;
+    const T = lang === "fr" ? FR : ES;
+    if (T[first]) return T[first];
+    for (const k in T) if (first.includes(k)) return T[k];
     return first;
   }
 

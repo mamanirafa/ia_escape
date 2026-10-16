@@ -29,6 +29,14 @@ Juego educativo tipo **sala de escape** para jugar en línea, pensado para estud
 - Al terminar se genera un **certificado** descargable en PNG o imprimible en PDF, con nombre, tiempo, reinicios, pistas y código de verificación.
 - El progreso se guarda en el navegador: si se recarga la página, se vuelve al mapa con las palabras obtenidas.
 
+**Idiomas: español, francés e inglés**
+
+- El botón **🌐 ES ▾** (arriba a la derecha) cambia el idioma en cualquier momento. Por defecto el juego está en **español**.
+- Se traduce todo: historia, salas, desafíos, pistas, prompts para la IA, cámara y certificado.
+- Si se cambia el idioma a mitad de un desafío, ese desafío se vuelve a cargar (no se pierde la sala).
+- En la bóveda final se acepta la palabra clave en cualquiera de los tres idiomas.
+- Los contenidos están en `js/data.js` (ES), `js/data.fr.js` (FR) y `js/data.en.js` (EN); los textos de la interfaz, en `js/i18n.js`.
+
 **Uso de IA dentro del juego**
 
 - **Sala 4:** la cámara (o una foto) se analiza con **MobileNet** (TensorFlow.js), una red neuronal real que corre en el navegador. Se ven las predicciones con su probabilidad.
@@ -86,7 +94,10 @@ ia_escape/
 ├── index.html              # Interfaz (pantallas, HUD, modales)
 ├── css/styles.css          # Estilo visual
 ├── js/
-│   ├── data.js             # ⚙️ Contenidos y configuración (editar acá)
+│   ├── data.js             # ⚙️ Contenidos en español y configuración
+│   ├── data.fr.js          # Contenidos en francés
+│   ├── data.en.js          # Contenidos en inglés
+│   ├── i18n.js             # Textos de la interfaz y selector de idioma
 │   ├── game.js             # Motor del juego
 │   ├── vision.js           # IA de visión (TensorFlow.js + MobileNet)
 │   ├── certificate.js      # Certificado en canvas (PNG / PDF)

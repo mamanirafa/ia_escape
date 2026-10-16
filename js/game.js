@@ -1,32 +1,42 @@
 /* =========================================================
-   BÓVEDA NEURAL · Motor del juego
+   BÓVEDA NEURAL · Motor del juego (multilingüe ES / FR / EN)
    ========================================================= */
 (() => {
   "use strict";
 
   /* ---------- utilidades ---------- */
   const $ = (s, el = document) => el.querySelector(s);
+  const T = (k, v) => I18N.t(k, v);
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
   const norm = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, "").trim();
   const fmt = (ms) => { const neg = ms < 0; ms = Math.abs(ms); const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000); return (neg ? "+" : "") + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0"); };
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const titleCase = (s) => s.toLowerCase().replace(/(^|\s|-)(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+  const cursoText = () => (I18N.lang !== "es" && CONFIG.cursoI18n && CONFIG.cursoI18n[I18N.lang]) || CONFIG.curso;
 
   /* ---------- estado ---------- */
   const TOTAL_MS = CONFIG.minutos * 60000;
-  const fresh = () => ({ name: "", startedAt: 0, penaltyMs: 0, unlocked: 0, keywords: [], resets: 0, hints: 0, hintRooms: [], finishedAt: 0, promptText: "", sound: true, words: [], order: [] });
+  const fresh = () => ({ name: "", startedAt: 0, penaltyMs: 0, unlocked: 0, keywords: [], resets: 0, hints: 0, hintRooms: [], finishedAt: 0, promptText: "", sound: true, wordIdx: [], order: [], activeMs: null });
   let S = fresh();
-  let room = null, roomIdx = -1, stageIdx = -1;
+  let room = null, roomIdx = -1, stageIdx = -1, roomView = "";
+  let screen = "screen-welcome";
   let timerId = null;
 
-  /* Palabras clave y orden únicos por jugador (anti-copia) */
+  /* Palabras clave y orden únicos por jugador (anti-copia).
+     Se guarda el ÍNDICE de la palabra: así se muestra en el idioma elegido. */
   function rnd(n) {
     try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; } catch (e) { return Math.floor(Math.random() * n); }
   }
   function assignWords() {
-    if (!Array.isArray(S.words) || S.words.length !== ROOMS.length) {
-      S.words = ROOMS.map((r, i) => S.keywords[i] || r.palabras[rnd(r.palabras.length)]);
+    if (!Array.isArray(S.wordIdx) || S.wordIdx.length !== ROOMS.length) {
+      // migración de partidas guardadas con la versión anterior (palabras en texto)
+      const old = Array.isArray(S.words) ? S.words : [];
+      S.wordIdx = ROOMS.map((r, i) => {
+        if (old[i]) for (const l of I18N.langs) { const k = I18N.roomsOf(l)[i].palabras.findIndex(w => norm(w) === norm(old[i])); if (k >= 0) return k; }
+        return rnd(r.palabras.length);
+      });
+      delete S.words;
     }
     if (!Array.isArray(S.order) || S.order.length !== ROOMS.length) {
       const o = ROOMS.map((r, i) => i);
@@ -35,6 +45,8 @@
       S.order = o;
     }
   }
+  const word = (i) => ROOMS[i].palabras[S.wordIdx[i]];
+  const solved = (i) => !!S.keywords[i];
 
   function save() { try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(S)); } catch (e) {} }
   function load() { try { const r = localStorage.getItem(CONFIG.storageKey); return r ? Object.assign(fresh(), JSON.parse(r)) : null; } catch (e) { return null; } }
@@ -42,6 +54,7 @@
 
   /* ---------- pantallas ---------- */
   function show(id) {
+    screen = id;
     document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === id));
     $("#hud").classList.toggle("hidden", id === "screen-welcome");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -52,7 +65,8 @@
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms);
   }
 
-  function modal({ html, buttons = [{ label: "Entendido", cls: "btn-primary" }], alert = false }) {
+  function modal({ html, buttons, alert = false }) {
+    buttons = buttons || [{ label: T("g.ok"), cls: "btn-primary" }];
     return new Promise(res => {
       $("#modal-box").classList.toggle("alert", alert);
       $("#modal-content").innerHTML = html;
@@ -68,48 +82,64 @@
     });
   }
 
-  /* ---------- HUD y tiempo ---------- */
-  function elapsed() { return ((S.finishedAt || Date.now()) - S.startedAt) + S.penaltyMs; }
+  /* ---------- HUD y tiempo (tiempo activo) ---------- */
+  let lastTick = Date.now(), tickCount = 0;
+  function elapsed() {
+    if (S.activeMs == null) return ((S.finishedAt || Date.now()) - S.startedAt) + S.penaltyMs; // partidas viejas
+    return S.activeMs + S.penaltyMs;
+  }
+  function tick() {
+    const now = Date.now(), d = now - lastTick;
+    lastTick = now;
+    if (!S.finishedAt && S.name && d > 0 && d < 120000) {
+      S.activeMs = (S.activeMs || 0) + d;
+      if (++tickCount % 5 === 0) save();
+    }
+    renderTimer();
+  }
   function renderTimer() {
     const rem = TOTAL_MS - elapsed();
     const el = $("#hud-timer");
     el.textContent = fmt(rem);
     el.classList.toggle("low", rem < 10 * 60000 && rem >= 0);
     el.classList.toggle("over", rem < 0);
-    if (rem < 0 && !S._overWarned && !S.finishedAt) {
-      S._overWarned = true;
-      toast("⏰ ¡Se terminaron los 60 minutos! Podés seguir en tiempo extra.", 4000);
-    }
+    if (rem < 0 && !S._overWarned && !S.finishedAt) { S._overWarned = true; toast(T("time.over"), 4000); }
   }
-  function startTimer() { clearInterval(timerId); renderTimer(); timerId = setInterval(renderTimer, 1000); }
+  function startTimer() { clearInterval(timerId); lastTick = Date.now(); renderTimer(); timerId = setInterval(tick, 1000); }
 
   function renderHUD() {
-    $("#hud-name").textContent = S.name;
+    $("#hud-name").textContent = S.name || "—";
     $("#hud-keys").innerHTML = ROOMS.map((r, i) => {
-      const got = S.keywords[i];
-      return `<span class="key-slot ${got ? "got" : ""}" title="Sala ${i + 1}">${got ? esc(got) : i + 1}</span>`;
+      const got = solved(i) && S.wordIdx.length;
+      const sh = T("room.short", { n: i + 1 });
+      return `<span class="key-slot ${got ? "got" : ""}" title="${esc(T("room.title", { n: i + 1 }))}">${got ? `<b>${sh}</b> ${esc(word(i))}` : sh}</span>`;
     }).join("");
     $("#btn-sound").textContent = S.sound ? "🔊" : "🔇";
   }
+  function renderStaticLabels() {
+    $("#btn-hint").textContent = T("room.hint", { min: CONFIG.penalidadPistaMin });
+    $("#foot").textContent = T("foot", { curso: cursoText() });
+  }
 
   /* ---------- bienvenida ---------- */
+  let savedGame = null;
   function initWelcome() {
-    const saved = load();
-    if (saved && saved.name) {
+    savedGame = load();
+    if (savedGame && savedGame.name) {
       $("#resume-box").classList.remove("hidden");
-      $("#resume-name").textContent = saved.name;
+      $("#resume-text").innerHTML = T("w.resume", { name: esc(savedGame.name) });
       $("#form-name").classList.add("hidden");
-      $("#btn-resume").onclick = () => { S = saved; SFX.set(S.sound); beginGame(); };
+      $("#btn-resume").onclick = () => { S = savedGame; SFX.set(S.sound); beginGame(); };
       $("#btn-new").onclick = async () => {
-        const ok = await modal({ html: `<h3>¿Nuevo jugador?</h3><p>Se borrará la partida de <strong>${esc(saved.name)}</strong>.</p>`, buttons: [{ label: "Cancelar", value: false }, { label: "Sí, borrar", cls: "btn-gold", value: true }] });
+        const ok = await modal({ html: `<h3>${T("w.newTitle")}</h3><p>${T("w.newText", { name: esc(savedGame.name) })}</p>`, buttons: [{ label: T("g.cancel"), value: false }, { label: T("g.yesDelete"), cls: "btn-gold", value: true }] });
         if (ok) { wipe(); location.reload(); }
       };
     }
     $("#form-name").addEventListener("submit", (e) => {
       e.preventDefault();
       const raw = $("#input-name").value.replace(/\s+/g, " ").trim();
-      if (raw.length < 3 || !/\p{L}{2,}/u.test(raw)) { toast("Escribí tu nombre y apellido (mínimo 3 letras)."); $("#input-name").focus(); return; }
-      S = fresh(); S.name = titleCase(raw); S.startedAt = Date.now(); assignWords(); save();
+      if (raw.length < 3 || !/\p{L}{2,}/u.test(raw)) { toast(T("w.nameBad")); $("#input-name").focus(); return; }
+      S = fresh(); S.name = titleCase(raw); S.startedAt = Date.now(); S.activeMs = 0; assignWords(); save();
       SFX.click();
       beginGame(true);
     });
@@ -122,64 +152,58 @@
     renderMap(); show("screen-map");
     if (first) {
       await modal({
-        html: `<img src="assets/img/aria.svg" alt=""><h3>Hola, ${esc(S.name)}</h3>
-               <p>Soy <b>ARIA</b>, la IA del banco. Tuve un error y cerré todo. 😬</p>
-               <p class="explain">• Resolvé las salas en orden.<br>• Cada sala te da una <b>palabra clave</b>: anotala.<br>• Tus palabras son <b>únicas</b>: las del compañero no te sirven. 😉<br>• Un error = la sala se reinicia.<br>• Las pistas suman 2 minutos.<br>• Tenés 60 minutos. ¡El reloj ya corre!</p>`,
-        buttons: [{ label: "¡Vamos! ▶", cls: "btn-primary" }]
+        html: `<img src="assets/img/aria.svg" alt=""><h3>${T("intro.hello", { name: esc(S.name) })}</h3>
+               <p>${T("intro.p")}</p><p class="explain">${T("intro.rules")}</p>`,
+        buttons: [{ label: T("intro.go"), cls: "btn-primary" }]
       });
     }
   }
 
   /* ---------- mapa ---------- */
-  const MAP_LINES = [
-    "Tu primera misión es el <b>Centro de Datos</b>. Tocá la puerta 1 para empezar.",
-    "¡Bien! Ya tenés tu primera palabra. Seguí con <b>Cumplimiento</b>: ahí se cuida la ética de los datos.",
-    "Vas muy bien. Ahora el <b>Laboratorio de Algoritmos</b>: pensá como una computadora.",
-    "Mitad del camino. En la <b>Fábrica de Modelos</b> vas a usar la cámara con una IA de visión real.",
-    "¡Excelente! En el <b>Estudio de Prompts</b> vas a darle instrucciones a una IA de verdad.",
-    "Última sala: la <b>Sala de Verificación</b>. No confíes en todo lo que dice una IA… ni siquiera en mí.",
-    "¡Tenés las 6 palabras! Andá a la <b>bóveda final</b>: te voy a pedir tus palabras en un orden especial."
-  ];
   function renderMap() {
-    $("#map-speech").innerHTML = `<b>ARIA:</b> ${MAP_LINES[Math.min(S.unlocked, 6)]}`;
+    const lines = T("map.lines");
+    $("#map-speech").innerHTML = `<b>ARIA:</b> ${lines[Math.min(S.unlocked, 6)]}`;
     $("#map-grid").innerHTML = ROOMS.map((r, i) => {
-      const done = !!S.keywords[i];
+      const done = solved(i);
       const open = !done && i === S.unlocked;
       const cls = done ? "done" : open ? "open" : "locked";
-      const badge = done ? "✔ Resuelta" : open ? "Abierta" : "🔒 Bloqueada";
-      return `<div class="door ${cls}" data-i="${i}" tabindex="0" role="button" aria-label="Sala ${i + 1}: ${esc(r.nombre)}">
+      const badge = T(done ? "door.done" : open ? "door.open" : "door.locked");
+      return `<div class="door ${cls}" data-i="${i}" tabindex="0" role="button" aria-label="${esc(T("door.aria", { n: i + 1, name: r.nombre }))}">
         <span class="badge">${badge}</span>
         <img src="${r.icono}" alt="">
         <h3>${i + 1}. ${esc(r.nombre)}</h3>
         <p>${esc(r.tema)} · ~${r.minutosSugeridos} min</p>
-        ${done ? `<div class="kw">🔑 ${esc(S.keywords[i])}</div>` : ""}
+        ${done ? `<div class="kw">🔑 ${esc(word(i))}</div>` : ""}
       </div>`;
     }).join("");
     document.querySelectorAll(".door").forEach(d => {
       const go = () => {
         const i = +d.dataset.i;
-        if (S.keywords[i]) return toast(`Ya resolviste esta sala. Tu palabra es ${S.keywords[i]}.`);
-        if (i !== S.unlocked) { SFX.error(); return toast("🔒 Primero resolvé la sala anterior."); }
+        if (solved(i)) return toast(T("door.solved", { w: word(i) }));
+        if (i !== S.unlocked) { SFX.error(); return toast(T("door.lockedToast")); }
         SFX.click(); enterRoom(i);
       };
       d.onclick = go; d.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
     });
-    const all = S.keywords.filter(Boolean).length === ROOMS.length;
+    const n = ROOMS.filter((r, i) => solved(i)).length, all = n === ROOMS.length;
     $("#btn-vault").disabled = !all;
-    $("#vault-status").textContent = all ? "¡Lista para abrir! Tené a mano tus 6 palabras." : `Palabras obtenidas: ${S.keywords.filter(Boolean).length} de ${ROOMS.length}.`;
+    $("#vault-status").textContent = all ? T("map.vaultReady") : T("map.vaultCount", { n, t: ROOMS.length });
   }
 
   /* ---------- salas ---------- */
+  function roomHead() {
+    $("#room-icon").src = room.icono;
+    $("#room-kicker").textContent = T("room.kicker", { n: roomIdx + 1, t: ROOMS.length, tema: room.tema });
+    $("#room-title").textContent = room.nombre;
+  }
   function enterRoom(i) {
     roomIdx = i; room = ROOMS[i]; stageIdx = -1;
-    $("#room-icon").src = room.icono;
-    $("#room-kicker").textContent = `Sala ${i + 1} de ${ROOMS.length} · ${room.tema}`;
-    $("#room-title").textContent = room.nombre;
+    roomHead();
     show("screen-room");
     renderIntro();
   }
 
-  function leaveRoom() { Vision.stopCamera(); room = null; roomIdx = -1; renderMap(); show("screen-map"); }
+  function leaveRoom() { Vision.stopCamera(); room = null; roomIdx = -1; roomView = ""; renderMap(); show("screen-map"); }
 
   function setProgress() {
     const p = stageIdx < 0 ? 0 : (stageIdx / room.etapas.length) * 100;
@@ -187,28 +211,32 @@
   }
 
   function renderIntro() {
+    roomView = "intro";
     setProgress();
     $("#room-body").innerHTML = `
       <div class="card" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
         <img src="assets/img/aria.svg" alt="" style="width:110px">
         <div style="flex:1;min-width:220px">
-          <p class="stage-title">ARIA dice:</p>
+          <p class="stage-title">${T("ri.says")}</p>
           <p>${esc(room.intro)}</p>
-          <p class="stage-sub">Desafíos en esta sala: <b>${room.etapas.length}</b>. Si te equivocás en cualquiera, la sala se reinicia.</p>
-          <button class="btn btn-primary" id="btn-start-room">Comenzar sala ▶</button>
+          <p class="stage-sub">${T("ri.sub", { n: room.etapas.length })}</p>
+          <button class="btn btn-primary" id="btn-start-room">${T("ri.start")}</button>
         </div>
       </div>`;
     $("#btn-start-room").onclick = () => { SFX.click(); nextStage(); };
   }
 
+  function renderStage() {
+    roomView = "stage";
+    $("#room-body").classList.remove("noanim");
+    const st = room.etapas[stageIdx];
+    RENDER[st.tipo](st);
+  }
   function nextStage() {
     stageIdx++;
     setProgress();
     if (stageIdx >= room.etapas.length) return completeRoom();
-    $("#room-body").classList.remove("noanim");
-    const st = room.etapas[stageIdx];
-    const R = RENDER[st.tipo];
-    R(st);
+    renderStage();
   }
 
   async function failRoom(explain) {
@@ -220,34 +248,42 @@
     const msg = ALERTAS[Math.floor(Math.random() * ALERTAS.length)];
     await modal({
       alert: true,
-      html: `<img src="assets/img/alerta.svg" alt=""><h3>¡SALA REINICIADA!</h3><p>${esc(msg)}</p>${explain ? `<p class="explain">${explain}</p>` : ""}`,
-      buttons: [{ label: "Reintentar la sala ↻", cls: "btn-gold" }]
+      html: `<img src="assets/img/alerta.svg" alt=""><h3>${T("fail.title")}</h3><p>${esc(msg)}</p>${explain ? `<p class="explain">${explain}</p>` : ""}`,
+      buttons: [{ label: T("fail.retry"), cls: "btn-gold" }]
     });
     stageIdx = -1; nextStage();
   }
 
-  async function completeRoom() {
+  function completeRoom() {
     Vision.stopCamera();
-    S.keywords[roomIdx] = S.words[roomIdx];
+    S.keywords[roomIdx] = true;
     S.unlocked = Math.max(S.unlocked, roomIdx + 1);
     save(); renderHUD();
     SFX.key();
+    renderDone();
+  }
+  function renderDone() {
+    roomView = "done";
     $("#room-progress").style.width = "100%";
     $("#room-body").innerHTML = `
       <div class="card reveal">
         <img src="assets/img/llave.svg" alt="">
-        <p class="stage-sub" style="margin:10px 0 0">¡Sala superada, ${esc(S.name.split(" ")[0])}! Tu palabra clave ${roomIdx + 1} es:</p>
-        <div class="keyword">${esc(S.words[roomIdx])}</div>
-        <p class="stage-sub">Anotala: la vas a necesitar en la bóveda final.<br><small>ARIA sortea las palabras para cada agente: la de tu compañero probablemente sea otra.</small></p>
-        <button class="btn btn-primary" id="btn-room-done">Volver al mapa ▶</button>
+        <p class="stage-sub" style="margin:10px 0 0">${T("done.text", { name: esc(S.name.split(" ")[0]), n: roomIdx + 1 })}</p>
+        <div class="keyword">${esc(word(roomIdx))}</div>
+        <p class="stage-sub">${T("done.note")}</p>
+        <button class="btn btn-primary" id="btn-room-done">${T("done.back")}</button>
       </div>`;
     $("#btn-room-done").onclick = () => { SFX.click(); leaveRoom(); };
   }
 
   function header(st, extra = "") {
-    return `<p class="stage-title">Desafío ${stageIdx + 1}/${room.etapas.length} · ${esc(st.titulo)}</p>
+    return `<p class="stage-title">${T("st.header", { i: stageIdx + 1, n: room.etapas.length, t: esc(st.titulo) })}</p>
             ${st.consigna ? `<p class="stage-sub">${esc(st.consigna)}</p>` : ""}${extra}`;
   }
+  const aiLinks = () => `<div class="ai-links">
+      <a class="btn btn-ghost small" href="https://gemini.google.com/" target="_blank" rel="noopener">Gemini ↗</a>
+      <a class="btn btn-ghost small" href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT ↗</a>
+      <a class="btn btn-ghost small" href="https://copilot.microsoft.com/" target="_blank" rel="noopener">Copilot ↗</a></div>`;
 
   /* ---------- tipos de etapa ---------- */
   const RENDER = {
@@ -257,7 +293,7 @@
       const draw = () => {
         const it = items[k];
         $("#room-body").innerHTML = `<div class="card">${header(st)}
-          <div class="counter">CASO ${k + 1} DE ${items.length}</div>
+          <div class="counter">${T("cl.case", { k: k + 1, n: items.length })}</div>
           <div class="case">${esc(it.texto)}</div>
           <div class="options">${st.opciones.map(o => `<button class="opt" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>`;
         document.querySelectorAll(".opt").forEach(b => b.onclick = async () => {
@@ -267,7 +303,7 @@
             k++; k < items.length ? draw() : nextStage();
           } else {
             b.classList.add("wrong"); SFX.error(); await sleep(500);
-            failRoom(`Caso: “${esc(it.texto)}”<br>Respuesta correcta: <b>${esc(it.r)}</b>.`);
+            failRoom(T("cl.fail", { c: esc(it.texto), r: esc(it.r) }));
           }
         });
       };
@@ -283,7 +319,7 @@
         document.querySelectorAll(".opt").forEach(x => x.disabled = true);
         const o = ops[+b.dataset.i];
         if (o.ok) { b.classList.add("correct"); SFX.ok(); await sleep(700); nextStage(); }
-        else { b.classList.add("wrong"); SFX.error(); await sleep(500); failRoom(`La respuesta correcta era: <b>${esc(ops.find(x => x.ok).t)}</b>`); }
+        else { b.classList.add("wrong"); SFX.error(); await sleep(500); failRoom(T("mcq.fail", { r: esc(ops.find(x => x.ok).t) })); }
       });
     },
 
@@ -292,8 +328,8 @@
       const ders = shuffle(st.pares.map(p => p.der));
       $("#room-body").innerHTML = `<div class="card">${header(st)}
         ${pares.map((p, i) => `<div class="match-row"><div>${esc(p.izq)}</div>
-          <select data-i="${i}" aria-label="Habilidad"><option value="">Elegí…</option>${ders.map(d => `<option>${esc(d)}</option>`).join("")}</select></div>`).join("")}
-        <div class="row"><button class="btn btn-primary" id="btn-check" disabled>Verificar</button></div></div>`;
+          <select data-i="${i}" aria-label="${esc(T("mt.aria"))}"><option value="">${T("mt.choose")}</option>${ders.map(d => `<option>${esc(d)}</option>`).join("")}</select></div>`).join("")}
+        <div class="row"><button class="btn btn-primary" id="btn-check" disabled>${T("mt.check")}</button></div></div>`;
       const sels = [...document.querySelectorAll("select")];
       sels.forEach(s => s.onchange = () => { SFX.click(); $("#btn-check").disabled = sels.some(x => !x.value); });
       $("#btn-check").onclick = () => {
@@ -301,7 +337,7 @@
         if (!bad.length) { SFX.ok(); nextStage(); }
         else {
           const p = pares[+bad[0].dataset.i];
-          failRoom(`Tenés ${bad.length} unión(es) incorrecta(s). Por ejemplo: “${esc(p.izq)}” corresponde a <b>${esc(p.der)}</b>.`);
+          failRoom(T("mt.fail", { n: bad.length, a: esc(p.izq), b: esc(p.der) }));
         }
       };
     },
@@ -313,21 +349,21 @@
       const draw = () => {
         $("#room-body").innerHTML = `<div class="card">${header(st)}
           <div class="order-wrap">
-            <div class="order-col"><h4>Pasos disponibles</h4><div class="order-list">
-              ${pool.length ? pool.map((p, k) => `<button class="opt" data-pool="${k}">${esc(p.t)}</button>`).join("") : `<div class="slot-empty">¡Ubicaste todos los pasos!</div>`}
+            <div class="order-col"><h4>${T("or.avail")}</h4><div class="order-list">
+              ${pool.length ? pool.map((p, k) => `<button class="opt" data-pool="${k}">${esc(p.t)}</button>`).join("") : `<div class="slot-empty">${T("or.all")}</div>`}
             </div></div>
-            <div class="order-col"><h4>Tu algoritmo (tocá un paso para quitarlo)</h4><div class="order-list">
-              ${chosen.length ? chosen.map((p, k) => `<div class="order-item"><span class="num">${k + 1}</span><button class="opt selected" style="flex:1" data-ch="${k}">${esc(p.t)}</button></div>`).join("") : `<div class="slot-empty">Todavía no elegiste ningún paso.</div>`}
+            <div class="order-col"><h4>${T("or.yours")}</h4><div class="order-list">
+              ${chosen.length ? chosen.map((p, k) => `<div class="order-item"><span class="num">${k + 1}</span><button class="opt selected" style="flex:1" data-ch="${k}">${esc(p.t)}</button></div>`).join("") : `<div class="slot-empty">${T("or.none")}</div>`}
             </div></div>
           </div>
-          <div class="row"><button class="btn btn-primary" id="btn-check" ${pool.length ? "disabled" : ""}>Ejecutar algoritmo ▶</button></div></div>`;
+          <div class="row"><button class="btn btn-primary" id="btn-check" ${pool.length ? "disabled" : ""}>${T("or.run")}</button></div></div>`;
         setTimeout(() => $("#room-body").classList.add("noanim"), 400);
         document.querySelectorAll("[data-pool]").forEach(b => b.onclick = () => { SFX.click(); chosen.push(pool.splice(+b.dataset.pool, 1)[0]); draw(); });
         document.querySelectorAll("[data-ch]").forEach(b => b.onclick = () => { SFX.click(); pool.push(chosen.splice(+b.dataset.ch, 1)[0]); draw(); });
         $("#btn-check").onclick = () => {
           const k = chosen.findIndex((p, idx) => p.i !== idx);
           if (k === -1) { SFX.ok(); nextStage(); }
-          else failRoom(`El algoritmo falló en el paso ${k + 1}. Ahí correspondía: <b>${esc(st.pasos[k])}</b>.`);
+          else failRoom(T("or.fail", { k: k + 1, s: esc(st.pasos[k]) }));
         };
       };
       draw();
@@ -339,7 +375,7 @@
       $("#room-body").innerHTML = `<div class="card">${header(st)}
         ${piezas.map((p, i) => `<div class="piece"><h4>${i + 1}. ${esc(p.parte.toUpperCase())}</h4>
           <div class="options col">${p.opciones.map((o, j) => `<button class="opt" data-p="${i}" data-o="${j}">${esc(o.t)}</button>`).join("")}</div></div>`).join("")}
-        <div class="row"><button class="btn btn-primary" id="btn-check" disabled>Verificar prompt</button></div></div>`;
+        <div class="row"><button class="btn btn-primary" id="btn-check" disabled>${T("bd.check")}</button></div></div>`;
       document.querySelectorAll("[data-p]").forEach(b => b.onclick = () => {
         SFX.click();
         const i = +b.dataset.p;
@@ -351,47 +387,46 @@
         const badI = piezas.findIndex((p, i) => !p.opciones[pick[i]].ok);
         if (badI === -1) {
           S.promptText = piezas.map((p, i) => p.opciones[pick[i]].t).join(" ");
+          S.promptLang = I18N.lang;
           save(); SFX.ok(); nextStage();
         } else {
           const p = piezas[badI], o = p.opciones[pick[badI]];
-          failRoom(`Pieza “${esc(p.parte)}”: ${esc(o.fb || "no es la mejor opción.")}`);
+          failRoom(T("bd.fail", { p: esc(p.parte), fb: esc(o.fb || T("bd.notBest")) }));
         }
       };
     },
 
     aipractice(st) {
-      const prompt = S.promptText || room.etapas.find(e => e.tipo === "builder").piezas.map(p => p.opciones.find(o => o.ok).t).join(" ");
+      // El prompt se arma con las piezas correctas en el idioma actual (si cambió el idioma, se traduce)
+      const correct = room.etapas.find(e => e.tipo === "builder").piezas.map(p => p.opciones.find(o => o.ok).t).join(" ");
+      const prompt = (S.promptText && S.promptLang === I18N.lang) ? S.promptText : correct;
       $("#room-body").innerHTML = `<div class="card">${header(st)}
-        <p><b>1.</b> Copiá tu prompt:</p>
+        <p>${T("ai.s1")}</p>
         <div class="prompt-box" id="prompt-box">${esc(prompt)}</div>
-        <div class="row"><button class="btn btn-gold small" id="btn-copy">📋 Copiar prompt</button></div>
-        <p style="margin-top:18px"><b>2.</b> Abrí una IA en otra pestaña y pegá el prompt:</p>
-        <div class="ai-links">
-          <a class="btn btn-ghost small" href="https://gemini.google.com/" target="_blank" rel="noopener">Gemini ↗</a>
-          <a class="btn btn-ghost small" href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT ↗</a>
-          <a class="btn btn-ghost small" href="https://copilot.microsoft.com/" target="_blank" rel="noopener">Copilot ↗</a>
-        </div>
-        <p><b>3.</b> Pegá acá la respuesta que te dio la IA:</p>
-        <textarea id="ai-answer" placeholder="Pegá la respuesta completa de la IA…"></textarea>
-        <div class="charcount" id="charcount">0 / ${st.minCaracteres} caracteres mínimos</div>
+        <div class="row"><button class="btn btn-gold small" id="btn-copy">${T("ai.copy")}</button></div>
+        <p style="margin-top:18px">${T("ai.s2")}</p>
+        ${aiLinks()}
+        <p>${T("ai.s3")}</p>
+        <textarea id="ai-answer" placeholder="${esc(T("ai.ph"))}"></textarea>
+        <div class="charcount" id="charcount">${T("ai.chars", { n: 0, m: st.minCaracteres })}</div>
         <p class="feedback bad" id="ai-fb"></p>
         <div class="row">
-          <button class="btn btn-primary" id="btn-check">Enviar a ARIA ▶</button>
-          <button class="btn btn-ghost small" id="btn-teacher">No tengo acceso a una IA</button>
+          <button class="btn btn-primary" id="btn-check">${T("ai.send")}</button>
+          <button class="btn btn-ghost small" id="btn-teacher">${T("ai.noAccess")}</button>
         </div></div>`;
       $("#btn-copy").onclick = async () => {
-        try { await navigator.clipboard.writeText(prompt); toast("✅ Prompt copiado. ¡Pegalo en la IA!"); }
-        catch (e) { const r = document.createRange(); r.selectNodeContents($("#prompt-box")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("Seleccioné el texto: copialo con Ctrl+C."); }
+        try { await navigator.clipboard.writeText(prompt); toast(T("ai.copied")); }
+        catch (e) { const r = document.createRange(); r.selectNodeContents($("#prompt-box")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast(T("ai.selected")); }
       };
       const ta = $("#ai-answer");
-      ta.oninput = () => { $("#charcount").textContent = `${ta.value.trim().length} / ${st.minCaracteres} caracteres mínimos`; };
+      ta.oninput = () => { $("#charcount").textContent = T("ai.chars", { n: ta.value.trim().length, m: st.minCaracteres }); };
       $("#btn-check").onclick = () => {
         const v = ta.value.trim();
         const fb = $("#ai-fb");
-        if (v.length < st.minCaracteres) { SFX.error(); fb.textContent = "La respuesta es muy corta. Pegá la respuesta completa de la IA."; return; }
-        if (norm(v).includes(norm(prompt).slice(0, 80)) && v.length < prompt.length + 120) { SFX.error(); fb.textContent = "Eso parece tu prompt, no la respuesta de la IA. 😉"; return; }
-        if ((v.match(/\d/g) || []).length < 3) { SFX.error(); fb.textContent = "Pediste un presupuesto: la respuesta debería tener números. ¿Seguro que es la respuesta de la IA?"; return; }
-        SFX.ok(); toast("🤖 ARIA analizó la respuesta: ¡tiene números y estructura!"); nextStage();
+        if (v.length < st.minCaracteres) { SFX.error(); fb.textContent = T("ai.short"); return; }
+        if (norm(v).includes(norm(prompt).slice(0, 80)) && v.length < prompt.length + 120) { SFX.error(); fb.textContent = T("ai.isPrompt"); return; }
+        if ((v.match(/\d/g) || []).length < 3) { SFX.error(); fb.textContent = T("ai.noNum"); return; }
+        SFX.ok(); toast(T("ai.ok")); nextStage();
       };
       $("#btn-teacher").onclick = () => teacherCode();
     },
@@ -404,26 +439,28 @@
           <div>
             <div class="cam-box" id="cam-box">
               <video id="cam" playsinline muted></video>
-              <div class="cam-msg" id="cam-msg">📷 Tocá “Activar cámara”.<br><small>El navegador te va a pedir permiso.</small></div>
+              <div class="cam-msg" id="cam-msg">${T("v.start")}</div>
             </div>
             <div class="row">
-              <button class="btn btn-primary" id="btn-cam">📷 Activar cámara</button>
-              <label class="btn btn-ghost small" style="cursor:pointer">🖼️ Subir foto<input type="file" accept="image/*" capture="environment" id="file-in" hidden></label>
-              <button class="btn btn-ghost small" id="btn-teacher">Sin cámara</button>
+              <button class="btn btn-primary" id="btn-cam">${T("v.cam")}</button>
+              <label class="btn btn-ghost small" style="cursor:pointer">${T("v.upload")}<input type="file" accept="image/*" capture="environment" id="file-in" hidden></label>
+              <button class="btn btn-ghost small" id="btn-teacher">${T("v.noCam")}</button>
             </div>
           </div>
           <div>
-            <p class="stage-sub" style="margin-bottom:8px">Objetos válidos (necesitás <b>${st.necesarios}</b>):</p>
+            <p class="stage-sub" style="margin-bottom:8px">${T("v.valid", { n: st.necesarios })}</p>
             <div class="targets">${st.objetivos.map((o, i) => `<div class="target" id="tg-${i}">${o.emoji} ${esc(o.nombre)}</div>`).join("")}</div>
-            <div class="preds" id="preds"><p class="stage-sub">Lo que “ve” la IA aparecerá acá con su probabilidad.</p></div>
+            <div class="preds" id="preds"><p class="stage-sub">${T("v.hint")}</p></div>
           </div>
         </div></div>`;
       const video = $("#cam"), msg = $("#cam-msg");
 
       const showPreds = (preds) => {
-        $("#preds").innerHTML = `<p class="stage-sub" style="margin:0 0 6px">La IA cree que ve:</p>` + preds.slice(0, 3).map(p =>
-          `<div class="pred"><span>${esc(Vision.translate(p.className))}${Vision.translate(p.className) !== p.className.split(",")[0].trim().toLowerCase() ? ` <small style="color:var(--muted)">(${esc(p.className.split(",")[0])})</small>` : ""}</span><b>${Math.round(p.probability * 100)}%</b>
-           <div class="bar"><div style="width:${Math.round(p.probability * 100)}%"></div></div></div>`).join("");
+        $("#preds").innerHTML = `<p class="stage-sub" style="margin:0 0 6px">${T("v.sees")}</p>` + preds.slice(0, 3).map(p => {
+          const tr = Vision.translate(p.className, I18N.lang), raw = p.className.split(",")[0].trim();
+          return `<div class="pred"><span>${esc(tr)}${tr.toLowerCase() !== raw.toLowerCase() ? ` <small style="color:var(--muted)">(${esc(raw)})</small>` : ""}</span><b>${Math.round(p.probability * 100)}%</b>
+           <div class="bar"><div style="width:${Math.round(p.probability * 100)}%"></div></div></div>`;
+        }).join("");
       };
       const check = (preds) => {
         showPreds(preds);
@@ -432,13 +469,13 @@
           const hit = preds.slice(0, 3).some(p => p.probability >= 0.12 && o.etiquetas.some(et => p.className.toLowerCase().includes(et)));
           if (hit) {
             found.add(i); $("#tg-" + i).classList.add("found"); SFX.ok();
-            toast(`✅ ¡La IA reconoció: ${o.nombre}! (${found.size}/${st.necesarios})`);
+            toast(T("v.found", { o: o.nombre, n: found.size, m: st.necesarios }));
           }
         });
-        if (found.size >= st.necesarios) { running = false; cancelAnimationFrame(raf); Vision.stopCamera(); setTimeout(nextStage, 1200); }
+        if (found.size >= st.necesarios) { running = false; cancelAnimationFrame(raf); Vision.stopCamera(); setTimeout(() => { if (roomView === "stage") nextStage(); }, 1200); }
       };
       const loop = async (t) => {
-        if (!running) return;
+        if (!running || !document.body.contains(video)) return;
         if (!busy && t - last > 900 && video.readyState >= 2) {
           busy = true; last = t;
           try { check(await Vision.classify(video)); } catch (e) { console.warn(e); }
@@ -448,9 +485,9 @@
       };
       const ensureModel = async () => {
         if (Vision.ready) return true;
-        msg.innerHTML = "⏳ Cargando la red neuronal MobileNet…<br><small>(solo la primera vez, puede tardar unos segundos)</small>";
+        msg.innerHTML = T("v.loading");
         try { await Vision.loadModel(); return true; }
-        catch (e) { msg.innerHTML = "⚠️ No se pudo cargar la IA de visión (¿sin internet?).<br><small>Pedile el código a tu docente con el botón “Sin cámara”.</small>"; return false; }
+        catch (e) { msg.innerHTML = T("v.loadFail"); return false; }
       };
       $("#btn-cam").onclick = async () => {
         SFX.click();
@@ -462,7 +499,7 @@
           running = true; raf = requestAnimationFrame(loop);
         } catch (e) {
           $("#btn-cam").disabled = false;
-          msg.innerHTML = "⚠️ No pude acceder a la cámara.<br><small>Revisá el permiso del navegador o usá “Subir foto”.</small>";
+          msg.innerHTML = T("v.camFail");
         }
       };
       $("#file-in").onchange = async (e) => {
@@ -472,7 +509,7 @@
         await img.decode().catch(() => {});
         running = false; Vision.stopCamera();
         const box = $("#cam-box"); box.innerHTML = ""; box.appendChild(img);
-        try { check(await Vision.classify(img)); } catch (er) { toast("No pude analizar esa imagen."); }
+        try { check(await Vision.classify(img)); } catch (er) { toast(T("v.imgFail")); }
         e.target.value = "";
       };
       $("#btn-teacher").onclick = () => teacherCode(() => { running = false; Vision.stopCamera(); });
@@ -481,14 +518,14 @@
 
   async function teacherCode(before) {
     const res = await modal({
-      html: `<h3>Código del docente</h3><p>Si no podés usar la cámara o una IA, pedile a tu docente el código de habilitación.</p>
-             <input type="text" id="tcode" placeholder="Código" style="text-align:center;text-transform:uppercase">`,
-      buttons: [{ label: "Cancelar", value: false }, { label: "Validar", cls: "btn-primary", value: true }]
+      html: `<h3>${T("tc.title")}</h3><p>${T("tc.text")}</p>
+             <input type="text" id="tcode" placeholder="${esc(T("tc.ph"))}" style="text-align:center;text-transform:uppercase">`,
+      buttons: [{ label: T("g.cancel"), value: false }, { label: T("tc.validate"), cls: "btn-primary", value: true }]
     });
     if (!res) return;
     const v = norm(document.getElementById("tcode")?.value || "");
-    if (v === norm(CONFIG.codigoDocente)) { before && before(); SFX.ok(); toast("Código correcto. ¡Seguimos!"); nextStage(); }
-    else { SFX.error(); toast("Código incorrecto."); }
+    if (v === norm(CONFIG.codigoDocente)) { before && before(); SFX.ok(); toast(T("tc.ok")); nextStage(); }
+    else { SFX.error(); toast(T("tc.bad")); }
   }
 
   /* ---------- pista ---------- */
@@ -496,31 +533,43 @@
     if (!room) return;
     const paid = S.hintRooms.includes(room.id);
     if (!paid) {
-      const ok = await modal({ html: `<img src="assets/img/aria.svg" alt=""><h3>¿Pedir una pista?</h3><p>Te va a costar <b>${CONFIG.penalidadPistaMin} minutos</b> extra.</p>`, buttons: [{ label: "Mejor no", value: false }, { label: "Sí, quiero la pista", cls: "btn-gold", value: true }] });
+      const ok = await modal({ html: `<img src="assets/img/aria.svg" alt=""><h3>${T("h.askTitle")}</h3><p>${T("h.askText", { min: CONFIG.penalidadPistaMin })}</p>`, buttons: [{ label: T("h.no"), value: false }, { label: T("h.yes"), cls: "btn-gold", value: true }] });
       if (!ok) return;
       S.hintRooms.push(room.id); S.hints++; S.penaltyMs += CONFIG.penalidadPistaMin * 60000; save(); renderTimer();
     }
-    await modal({ html: `<img src="assets/img/aria.svg" alt=""><h3>💡 Pista de ARIA</h3><p class="explain">${esc(room.pista)}</p>` });
+    await modal({ html: `<img src="assets/img/aria.svg" alt=""><h3>${T("h.title")}</h3><p class="explain">${esc(room.pista)}</p>` });
   }
 
   /* ---------- bóveda final ---------- */
-  function renderFinal() {
-    $("#form-final").innerHTML = S.order.map((ri, k) => `<div><label for="fk${k}">${k + 1}.º → palabra de la Sala ${ri + 1} (${esc(ROOMS[ri].nombre)})</label><input type="text" id="fk${k}" maxlength="16"></div>`).join("");
+  function renderFinal(keep) {
+    $("#form-final").innerHTML = S.order.map((ri, k) => `<div class="fslot">
+      <div class="fslot-head"><span class="fslot-pos">${T("f.pos", { k: k + 1 })}</span><img src="${ROOMS[ri].icono}" alt=""><div><b>${T("f.room", { n: ri + 1 })}</b><small>${esc(ROOMS[ri].nombre)}</small></div></div>
+      <input type="text" id="fk${k}" maxlength="18" aria-label="${esc(T("f.ph", { n: ri + 1 }))}" placeholder="${esc(T("f.ph", { n: ri + 1 }))}" value="${keep ? esc(keep[k] || "") : ""}"></div>`).join("");
     $("#final-feedback").textContent = ""; $("#final-feedback").className = "feedback";
     show("screen-final");
-    setTimeout(() => $("#fk0")?.focus(), 300);
+    if (!keep) setTimeout(() => $("#fk0")?.focus(), 300);
   }
+  // Acepta la palabra en cualquiera de los 3 idiomas (mismo índice)
+  const matches = (input, ri) => I18N.langs.some(l => norm(I18N.roomsOf(l)[ri].palabras[S.wordIdx[ri]]) === norm(input));
   async function tryOpenVault() {
-    const ok = S.order.every((ri, k) => norm($("#fk" + k).value) === norm(S.words[ri]));
     const fb = $("#final-feedback");
-    if (!ok) {
+    let good = 0;
+    S.order.forEach((ri, k) => {
+      const inp = $("#fk" + k);
+      const ok = matches(inp.value, ri);
+      if (ok) good++;
+      inp.classList.toggle("ok", ok);
+      inp.classList.toggle("bad", !ok && inp.value.trim() !== "");
+    });
+    if (good < ROOMS.length) {
       SFX.error(); const card = $(".final"); card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake");
-      fb.className = "feedback bad"; fb.textContent = "❌ Código incorrecto. Revisá que sean TUS palabras y el orden que pide ARIA.";
+      fb.className = "feedback bad";
+      fb.textContent = T("f.bad", { g: good, t: ROOMS.length });
       return;
     }
-    fb.className = "feedback good"; fb.textContent = "✅ ¡Código aceptado! Abriendo la bóveda…";
+    fb.className = "feedback good"; fb.textContent = T("f.ok");
     $("#final-img").classList.add("opening"); SFX.win();
-    S.finishedAt = Date.now(); save(); renderTimer(); clearInterval(timerId);
+    tick(); S.finishedAt = Date.now(); save(); renderTimer(); clearInterval(timerId);
     await sleep(1600);
     showCertificate();
   }
@@ -530,21 +579,38 @@
     show("screen-cert"); renderHUD(); renderTimer();
     const t = elapsed();
     const d = new Date(S.finishedAt || Date.now());
-    const date = d.toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric" });
-    const time = (t <= TOTAL_MS ? fmt(t) : fmt(t) + " (con tiempo extra)") + " min";
-    $("#cert-summary").textContent = `${S.name}: tiempo ${time} · reinicios ${S.resets} · pistas ${S.hints}`;
-    const data = { name: S.name, date, time, resets: S.resets, hints: S.hints, keywords: S.words, docente: CONFIG.docente, curso: CONFIG.curso, institucion: CONFIG.institucion };
+    const date = d.toLocaleDateString(I18N.locale, { day: "2-digit", month: "long", year: "numeric" });
+    const time = (t <= TOTAL_MS ? fmt(t) : fmt(t) + T("c.extra")) + " min";
+    $("#cert-summary").textContent = T("c.summary", { name: S.name, time, r: S.resets, h: S.hints });
+    const data = { name: S.name, date, time, resets: S.resets, hints: S.hints, keywords: ROOMS.map((r, i) => word(i)), docente: CONFIG.docente, curso: cursoText(), institucion: CONFIG.institucion, tx: T, codeKey: d.toISOString().slice(0, 10) + "|" + S.wordIdx.join("") };
     await Certificate.draw($("#cert-canvas"), data);
+  }
+
+  /* ---------- cambio de idioma en cualquier momento ---------- */
+  function onLangChange() {
+    renderStaticLabels();
+    if (!S.name) { if (savedGame && savedGame.name) $("#resume-text").innerHTML = T("w.resume", { name: esc(savedGame.name) }); return; }
+    renderHUD();
+    if (screen === "screen-welcome" && savedGame && savedGame.name) $("#resume-text").innerHTML = T("w.resume", { name: esc(savedGame.name) });
+    if (screen === "screen-map") renderMap();
+    if (screen === "screen-room" && roomIdx >= 0) {
+      room = ROOMS[roomIdx]; roomHead();
+      if (roomView === "intro") renderIntro();
+      else if (roomView === "done") renderDone();
+      else if (roomView === "stage") { Vision.stopCamera(); renderStage(); toast(T("lang.changedMid")); }
+    }
+    if (screen === "screen-final") { const keep = S.order.map((ri, k) => $("#fk" + k)?.value || ""); renderFinal(keep); }
+    if (screen === "screen-cert") showCertificate();
   }
 
   /* ---------- menú y eventos globales ---------- */
   async function openMenu() {
     const v = await modal({
-      html: `<h3>⚙️ Opciones</h3><p>Agente: <b>${esc(S.name)}</b></p><p class="explain">Tu progreso se guarda en este navegador. Si recargás la página, volvés al mapa con tus palabras clave.</p>`,
-      buttons: [{ label: "Cerrar", value: 0 }, { label: "Reiniciar juego completo", cls: "btn-gold", value: 1 }]
+      html: `<h3>${T("m.title")}</h3><p>${T("m.agent", { name: esc(S.name) })}</p><p class="explain">${T("m.saved")}</p>`,
+      buttons: [{ label: T("m.close"), value: 0 }, { label: T("m.reset"), cls: "btn-gold", value: 1 }]
     });
     if (v === 1) {
-      const sure = await modal({ html: `<h3>¿Seguro?</h3><p>Se borra todo el progreso y el nombre.</p>`, buttons: [{ label: "Cancelar", value: false }, { label: "Sí, borrar todo", cls: "btn-gold", value: true }] });
+      const sure = await modal({ html: `<h3>${T("m.sureTitle")}</h3><p>${T("m.sureText")}</p>`, buttons: [{ label: T("g.cancel"), value: false }, { label: T("m.sureYes"), cls: "btn-gold", value: true }] });
       if (sure) { Vision.stopCamera(); wipe(); location.reload(); }
     }
   }
@@ -554,8 +620,8 @@
     $("#btn-menu").onclick = openMenu;
     $("#btn-hint").onclick = showHint;
     $("#btn-back-map").onclick = async () => {
-      if (stageIdx >= 0 && room && !S.keywords[roomIdx]) {
-        const ok = await modal({ html: `<h3>¿Salir de la sala?</h3><p>Vas a perder el avance de esta sala y tendrás que empezarla de nuevo.</p>`, buttons: [{ label: "Quedarme", value: false }, { label: "Salir al mapa", cls: "btn-gold", value: true }] });
+      if (stageIdx >= 0 && room && !solved(roomIdx)) {
+        const ok = await modal({ html: `<h3>${T("lv.title")}</h3><p>${T("lv.text")}</p>`, buttons: [{ label: T("lv.stay"), value: false }, { label: T("lv.exit"), cls: "btn-gold", value: true }] });
         if (!ok) return;
       }
       leaveRoom();
@@ -564,16 +630,20 @@
     $("#btn-final-back").onclick = () => { renderMap(); show("screen-map"); };
     $("#btn-final-open").onclick = tryOpenVault;
     $("#form-final").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); tryOpenVault(); } });
-    $("#btn-cert-download").onclick = () => Certificate.download($("#cert-canvas"), S.name);
+    $("#btn-cert-download").onclick = () => Certificate.download($("#cert-canvas"), S.name, T("c.file"));
     $("#btn-cert-print").onclick = () => Certificate.print($("#cert-canvas"));
     $("#btn-cert-new").onclick = async () => {
-      const ok = await modal({ html: `<h3>¿Nuevo jugador?</h3><p>Descargá antes tu certificado: se borrará esta partida.</p>`, buttons: [{ label: "Cancelar", value: false }, { label: "Sí, nuevo jugador", cls: "btn-gold", value: true }] });
+      const ok = await modal({ html: `<h3>${T("c.newTitle")}</h3><p>${T("c.newText")}</p>`, buttons: [{ label: T("g.cancel"), value: false }, { label: T("c.newYes"), cls: "btn-gold", value: true }] });
       if (ok) { wipe(); location.reload(); }
     };
-    $("#foot-course").textContent = CONFIG.curso;
-    window.addEventListener("beforeunload", () => Vision.stopCamera());
+    window.addEventListener("beforeunload", () => { Vision.stopCamera(); if (S.name) { tick(); save(); } });
+    document.addEventListener("visibilitychange", () => { if (S.name) { tick(); save(); } });
+    I18N.onChange(onLangChange);
   }
 
+  I18N.initPicker();
+  I18N.apply();
+  renderStaticLabels();
   bind();
   initWelcome();
 })();

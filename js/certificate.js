@@ -21,7 +21,7 @@ const Certificate = (() => {
     do { ctx.font = `${font.replace("{s}", s)}`; s -= 2; } while (ctx.measureText(text).width > maxW && s > 20);
   }
 
-  function drawSeal(ctx, cx, cy, r) {
+  function drawSeal(ctx, cx, cy, r, label = "ESCAPE") {
     // estrella dentada
     ctx.save(); ctx.translate(cx, cy);
     ctx.beginPath();
@@ -45,13 +45,16 @@ const Certificate = (() => {
     ctx.fillStyle = "#f5b942";
     [...pts, [0, 0]].forEach(p => { ctx.beginPath(); ctx.arc(p[0], p[1], 7, 0, Math.PI * 2); ctx.fill(); });
     ctx.fillStyle = "#f5b942"; ctx.font = "700 16px Orbitron, sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("ESCAPE", 0, 52);
+    ctx.fillText(label, 0, 52);
     ctx.restore();
   }
 
   async function draw(canvas, data) {
     try { await document.fonts.ready; } catch (e) {}
     const ctx = canvas.getContext("2d");
+    const tx = data.tx || ((k) => k);
+    const W0 = canvas.width;
+    const line = (text, y, size, weight) => { fitText(ctx, text, W0 - 260, size, weight + " {s}px Inter, sans-serif"); ctx.fillText(text, W0 / 2, y); };
     const W = canvas.width, H = canvas.height;
 
     // fondo
@@ -71,15 +74,15 @@ const Certificate = (() => {
     grd.addColorStop(0, "#0b1a3d"); grd.addColorStop(1, "#123a6b");
     ctx.fillStyle = grd; roundRect(ctx, 72, 72, W - 144, 150, 14); ctx.fill();
     ctx.fillStyle = "#19d3c5"; ctx.font = "900 46px Orbitron, sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("BÓVEDA NEURAL", W / 2, 140);
+    ctx.fillText(tx("cv.brand"), W / 2, 140);
     ctx.fillStyle = "#f5b942"; ctx.font = "600 22px Inter, sans-serif";
-    ctx.fillText("ESCAPE DEL BANCO AUSTRAL DE DATOS · ESCAPE ROOM DE INTELIGENCIA ARTIFICIAL", W / 2, 186);
+    line(tx("cv.sub"), 186, 22, "600");
 
     // título
     ctx.fillStyle = "#0b1a3d"; ctx.font = "700 58px Orbitron, sans-serif";
-    ctx.fillText("CERTIFICADO DE ESCAPE", W / 2, 320);
+    fitText(ctx, tx("cv.title"), W - 300, 58, "700 {s}px Orbitron, sans-serif"); ctx.fillText(tx("cv.title"), W / 2, 320);
     ctx.fillStyle = "#4a5878"; ctx.font = "400 26px Inter, sans-serif";
-    ctx.fillText("Se certifica que", W / 2, 380);
+    ctx.fillText(tx("cv.certifies"), W / 2, 380);
 
     // nombre
     ctx.fillStyle = "#0e9f95";
@@ -90,9 +93,9 @@ const Certificate = (() => {
 
     // texto
     ctx.fillStyle = "#26314d"; ctx.font = "400 26px Inter, sans-serif";
-    ctx.fillText("logró escapar de la Bóveda Neural superando las 6 salas y demostrando conocimientos sobre", W / 2, 556);
+    line(tx("cv.l1"), 556, 26, "400");
     ctx.font = "600 26px Inter, sans-serif";
-    ctx.fillText("Big Data, ética de datos, pensamiento computacional, Machine Learning y Prompt Engineering.", W / 2, 596);
+    line(tx("cv.l2"), 596, 26, "600");
 
     // palabras clave
     const kws = data.keywords;
@@ -112,10 +115,10 @@ const Certificate = (() => {
 
     // datos
     ctx.textAlign = "center"; ctx.fillStyle = "#26314d"; ctx.font = "500 24px Inter, sans-serif";
-    ctx.fillText(`Tiempo: ${data.time}   ·   Reinicios de sala: ${data.resets}   ·   Pistas usadas: ${data.hints}`, W / 2, 750);
+    line(tx("cv.stats", { time: data.time, r: data.resets, h: data.hints }), 750, 24, "500");
 
     // sello
-    drawSeal(ctx, W / 2, 880, 92);
+    drawSeal(ctx, W / 2, 880, 92, tx("cv.seal"));
 
     // firmas
     ctx.strokeStyle = "#0b1a3d"; ctx.lineWidth = 2;
@@ -125,18 +128,18 @@ const Certificate = (() => {
     ctx.fillText(data.docente, 390, 955);
     ctx.fillText(data.date, W - 390, 955);
     ctx.fillStyle = "#4a5878"; ctx.font = "400 20px Inter, sans-serif";
-    ctx.fillText("Docente", 390, 985);
-    ctx.fillText("Fecha", W - 390, 985);
+    ctx.fillText(tx("cv.teacher"), 390, 985);
+    ctx.fillText(tx("cv.date"), W - 390, 985);
     ctx.fillStyle = "#4a5878"; ctx.font = "400 20px Inter, sans-serif";
     const inst = [data.curso, data.institucion].filter(Boolean).join(" · ");
     ctx.fillText(inst, W / 2, 1010);
     ctx.font = "400 16px Inter, sans-serif"; ctx.fillStyle = "#8090ad";
-    ctx.fillText(`Código de verificación: ${code(data.name, data.date)}   ·   Contenidos: Programa EsencIA, Unidades 2 y 3`, W / 2, 1040);
+    line(tx("cv.code", { code: code(data.name, data.codeKey || data.date) }), 1040, 16, "400");
   }
 
-  function download(canvas, name) {
+  function download(canvas, name, prefix = "Certificado_Boveda_Neural_") {
     const a = document.createElement("a");
-    a.download = "Certificado_Boveda_Neural_" + name.replace(/[^\p{L}\p{N}]+/gu, "_") + ".png";
+    a.download = prefix + name.replace(/[^\p{L}\p{N}]+/gu, "_") + ".png";
     a.href = canvas.toDataURL("image/png");
     document.body.appendChild(a); a.click(); a.remove();
   }
